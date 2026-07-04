@@ -1,0 +1,1524 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fechamento Automático de Carrinhos — SPA1 Colaborativo</title>
+  
+  <!-- Tailwind CSS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <!-- Configurações do Tailwind para o Tema Branco e Azul -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            navy: {
+              50: '#f4f6fa',
+              100: '#e8ecf5',
+              200: '#cbd7ea',
+              300: '#9cb3d7',
+              400: '#6786be',
+              500: '#1d2e54', // Navy KN Principal
+              600: '#162444',
+              700: '#0f1b35',
+              850: '#0d162a',
+              900: '#050811',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Estilos Gerais e Animações das Bolhas Azuis e Brancas -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    /* Animação de Flutuação Suave para as Bolhas */
+    @keyframes floatBubble {
+      0% {
+        transform: translate(0, 0) scale(1) rotate(0deg);
+      }
+      33% {
+        transform: translate(30px, -50px) scale(1.05) rotate(120deg);
+      }
+      66% {
+        transform: translate(-20px, 30px) scale(0.95) rotate(240deg);
+      }
+      100% {
+        transform: translate(0, 0) scale(1) rotate(360deg);
+      }
+    }
+
+    .bubble-animation-1 {
+      animation: floatBubble 18s infinite ease-in-out alternate;
+    }
+    .bubble-animation-2 {
+      animation: floatBubble 24s infinite ease-in-out alternate-reverse;
+    }
+    .bubble-animation-3 {
+      animation: floatBubble 20s infinite ease-in-out alternate;
+    }
+    .bubble-animation-4 {
+      animation: floatBubble 28s infinite ease-in-out alternate-reverse;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="bg-[#e6f0fa] text-slate-800 min-h-screen flex flex-col transition-colors duration-200 relative overflow-x-hidden">
+
+  <!-- ========================================== -->
+  <!-- ESTRUTURA DE BOLHAS FLUTUANTES (AZUL E BRANCO) -->
+  <!-- ========================================== -->
+  <div class="fixed inset-0 -z-50 overflow-hidden pointer-events-none">
+    <!-- Bolha 1 - Azul Royal Suave -->
+    <div class="absolute w-[380px] h-[380px] rounded-full bg-blue-300/40 blur-[100px] -top-20 -left-20 bubble-animation-1"></div>
+    <!-- Bolha 2 - Branco Brilhante Translúcido -->
+    <div class="absolute w-[450px] h-[450px] rounded-full bg-white/60 blur-[120px] -bottom-20 -right-20 bubble-animation-2"></div>
+    <!-- Bolha 3 - Azul Marinho KN Suave -->
+    <div class="absolute w-[320px] h-[320px] rounded-full bg-blue-400/30 blur-[90px] top-[35%] right-[15%] bubble-animation-3"></div>
+    <!-- Bolha 4 - Azul Celeste Claro -->
+    <div class="absolute w-[350px] h-[350px] rounded-full bg-blue-200/40 blur-[110px] bottom-[25%] left-[10%] bubble-animation-4"></div>
+  </div>
+
+  <!-- NOTIFICAÇÃO TOAST CUSTOMIZADA -->
+  <div id="toast-container" class="fixed top-5 right-5 z-[9999] flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- MODAL DE CONFIRMAÇÃO CUSTOMIZADO -->
+  <div id="confirm-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[9990] hidden items-center justify-center p-4">
+    <div class="bg-white border border-slate-100 rounded-2xl max-w-md w-full p-6 shadow-2xl scale-95 transition-transform duration-200" id="confirm-box">
+      <div class="flex items-center gap-3 text-blue-600 mb-4">
+        <i data-lucide="alert-triangle" class="w-6 h-6 shrink-0"></i>
+        <h3 class="text-lg font-bold text-slate-900" id="confirm-title">Confirmar Ação</h3>
+      </div>
+      <p class="text-slate-600 text-sm mb-6" id="confirm-message">Você tem certeza que deseja realizar esta operação?</p>
+      <div class="flex justify-end gap-3">
+        <button id="confirm-btn-no" class="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold rounded-xl transition">Cancelar</button>
+        <button id="confirm-btn-yes" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/20 transition">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOADER DE IMPRESSÃO -->
+  <div id="print-loading" class="fixed inset-0 bg-blue-900/80 backdrop-blur-md z-[9995] hidden flex-col items-center justify-center text-white">
+    <div class="animate-spin rounded-full h-12 w-12 border-4 border-white/20 border-t-white mb-4"></div>
+    <p class="text-lg font-bold animate-pulse">Gerando imagem em alta resolution...</p>
+    <p class="text-xs text-white/60 mt-1">Aguarde alguns segundos</p>
+  </div>
+
+  <!-- HEADER PRINCIPAL (AZUL E BRANCO) -->
+  <header class="bg-navy-500 text-white sticky top-0 z-50 px-4 py-3 shadow-md">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="bg-white text-navy-500 font-extrabold text-lg px-3 py-1.5 rounded-xl shadow-inner tracking-wider">KN</div>
+        <div>
+          <h1 class="text-sm font-bold text-white tracking-wider uppercase">Fechamento Automático de Carrinhos</h1>
+          <p class="text-[10px] text-blue-200 font-semibold uppercase tracking-widest font-mono">SPA1 — Hub Logístico Colaborativo</p>
+        </div>
+      </div>
+      
+      <!-- Controles Superiores -->
+      <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+        <!-- Histórico -->
+        <button onclick="abrirHistorico()" class="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold rounded-xl transition">
+          <i data-lucide="calendar" class="w-4 h-4"></i>
+          <span>HISTÓRICO</span>
+        </button>
+
+        <!-- Salvar PNG -->
+        <button onclick="gerarPNG()" class="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-purple-500/15">
+          <i data-lucide="camera" class="w-4 h-4"></i>
+          <span>SALVAR PNG</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ABAS DE NAVEGAÇÃO -->
+  <div class="bg-white border-b border-slate-200 sticky top-[61px] sm:top-[69px] z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto flex">
+      <button id="tab-dados" onclick="setTab('dados')" class="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 border-b-2 border-transparent transition-all hover:text-blue-600 active">
+        <i data-lucide="clipboard-edit" class="w-4 h-4"></i>
+        Entrada de Dados
+      </button>
+      <button id="tab-dash" onclick="setTab('dash')" class="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 border-b-2 border-transparent transition-all hover:text-blue-600">
+        <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+        Dashboard
+      </button>
+    </div>
+  </div>
+
+  <main class="flex-grow max-w-7xl w-full mx-auto p-4 md:p-6 relative z-10">
+    
+    <!-- ========================================== -->
+    <!-- ABA DE ENTRADA DE DADOS -->
+    <!-- ========================================== -->
+    <div id="aba-dados-content" class="space-y-6">
+
+      <!-- Painel de Sincronização em Nuvem (Multi-Usuário) -->
+      <div class="bg-white border border-blue-100 rounded-2xl shadow-md overflow-hidden text-slate-700">
+        <div class="px-5 py-3 flex items-center justify-between border-b border-blue-100 bg-blue-50/50">
+          <div class="flex items-center gap-2">
+            <i data-lucide="cloud" class="w-4 h-4 text-blue-600"></i>
+            <h2 class="text-xs font-bold uppercase tracking-wider text-navy-500">Sincronização Colaborativa em Tempo Real</h2>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="cloud-status-indicator" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+            <span id="cloud-status-text" class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Conectando à Nuvem...</span>
+          </div>
+        </div>
+        <div class="p-5 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+          <div class="md:col-span-4 space-y-1">
+            <label class="block text-[10px] font-extrabold uppercase tracking-widest text-blue-800">Código da Sala Compartilhada</label>
+            <div class="flex gap-2">
+              <input type="text" id="cloud-room-input" value="SPA1-GERAL" placeholder="Código ex: TURNO-A" class="w-full bg-slate-50 border border-slate-200 text-slate-800 px-3 py-1.5 rounded-xl text-xs uppercase font-bold focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <button onclick="conectarSala(document.getElementById('cloud-room-input').value)" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition uppercase shrink-0">Entrar</button>
+            </div>
+          </div>
+          <div class="md:col-span-5 flex flex-col justify-center text-xs space-y-1 text-slate-600 border-t md:border-t-0 md:border-l border-blue-100 md:pl-4 py-2 md:py-0">
+            <p class="font-medium text-slate-800">Sala Ativa: <span id="cloud-room-lbl" class="font-extrabold text-blue-600">SPA1-GERAL</span></p>
+            <p class="text-[10px]">Pessoas na mesma sala visualizam, inserem e atualizam as informações juntas ao mesmo tempo!</p>
+            <p id="cloud-last-sync" class="text-[10px] font-mono text-emerald-600">Carregando conexões da nuvem...</p>
+          </div>
+          <div class="md:col-span-3 text-right flex flex-col justify-center items-start md:items-end border-t md:border-t-0 md:border-l border-blue-100 md:pl-4 py-2 md:py-0">
+            <p class="text-[9px] font-bold uppercase text-blue-800 tracking-wider">Identificador UUID</p>
+            <p id="cloud-user-id" class="text-[10px] font-mono text-slate-500 truncate max-w-full" title="UUID do usuário">-</p>
+            <button onclick="sincronizarComNuvem()" class="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded-lg uppercase tracking-wider transition">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Sincronizar Agora
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Bloco Configurações -->
+      <div class="bg-white border border-blue-100 rounded-2xl shadow-md overflow-hidden">
+        <div class="bg-blue-50/40 px-5 py-3 flex items-center justify-between border-b border-blue-100">
+          <div class="flex items-center gap-2 text-navy-500">
+            <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+            <h2 class="text-xs font-bold uppercase tracking-wider">Parâmetros de Controle</h2>
+          </div>
+          <button onclick="confirmarLimpeza()" class="flex items-center gap-1.5 px-2.5 py-1 text-red-600 border border-red-200 hover:bg-red-600 hover:text-white rounded-lg text-xs font-semibold transition">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            Limpar Dados
+          </button>
+        </div>
+        
+        <div class="p-5">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div>
+              <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-500 mb-1.5">Data de Execução</label>
+              <input type="date" id="inp-data" onchange="sincronizarComNuvem()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 px-3 py-2 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+            </div>
+            <div>
+              <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-500 mb-1.5">Ciclo Operacional</label>
+              <input type="text" id="inp-ciclo" placeholder="Ex: AM6" onchange="sincronizarComNuvem()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 px-3 py-2 rounded-xl text-xs uppercase focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+            </div>
+            <div>
+              <label class="block text-[10px] font-extrabold uppercase tracking-widest text-slate-500 mb-1.5">Meta de Fechamento</label>
+              <div class="relative">
+                <input type="number" id="inp-meta" value="0.70" min="0" max="1" step="0.01" onchange="sincronizarComNuvem()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 px-3 py-2 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">%</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 bg-blue-50 border border-blue-100 p-2.5 rounded-xl text-[11px] text-slate-600">
+              <i data-lucide="info" class="w-4 h-4 text-blue-500 shrink-0"></i>
+              <span>O sistema detecta a ilha automaticamente usando o primeiro caractere da rota informada (Ex: <b>A</b>4_AM6 -> Ilha <b>A</b>).</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grid Ilhas e Pendentes -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Total de Carrinhos por Ilha -->
+        <div class="bg-white border border-blue-100 rounded-2xl shadow-md overflow-hidden lg:col-span-5 flex flex-col">
+          <div class="bg-blue-50/40 px-5 py-3 flex items-center justify-between border-b border-blue-100">
+            <div class="flex items-center gap-2 text-navy-500">
+              <i data-lucide="table-properties" class="w-4 h-4 text-blue-600"></i>
+              <h2 class="text-xs font-bold uppercase tracking-wider">Capacidade por Ilha</h2>
+            </div>
+            <span id="tot-ilhas-count" class="text-[10px] bg-blue-100 text-blue-700 font-extrabold px-2 py-0.5 rounded-full uppercase">0 Ativas</span>
+          </div>
+          
+          <div class="p-4 flex-grow overflow-x-auto custom-scrollbar">
+            <table class="w-full border-collapse">
+              <thead>
+                <tr class="border-b border-slate-100 text-[10px] text-slate-400 uppercase tracking-wider font-extrabold text-left">
+                  <th class="pb-2">Ilha / Rua</th>
+                  <th class="pb-2">Total Carrinhos</th>
+                  <th class="pb-2 w-10 text-center"></th>
+                </tr>
+              </thead>
+              <tbody id="tbody-ilhas" class="divide-y divide-slate-100">
+                <!-- Inserido dinamicamente -->
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- FOOTER DA TABELA: CONTADOR ACUMULADO E BOTÃO -->
+          <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center gap-4">
+            <button onclick="addIlha()" class="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-blue-500/15">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              Nova Ilha
+            </button>
+            <div class="text-right border-l border-slate-200 pl-4">
+              <span class="text-[9px] text-slate-400 block uppercase font-bold tracking-widest">Capacidade Total:</span>
+              <span id="tot-capacidade-count" class="text-sm font-extrabold text-blue-600">0 carrinhos</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Área de Colagem e Analisador de Rotas -->
+        <div class="bg-white border border-blue-100 rounded-2xl shadow-md overflow-hidden lg:col-span-7 flex flex-col">
+          <div class="bg-blue-50/40 px-5 py-3 flex items-center justify-between border-b border-blue-100">
+            <div class="flex items-center gap-2 text-navy-500">
+              <i data-lucide="copy" class="w-4 h-4 text-blue-600"></i>
+              <h2 class="text-xs font-bold uppercase tracking-wider">Pendentes — Cole a lista de Rotas</h2>
+            </div>
+            <span class="text-[10px] bg-blue-50 text-blue-600 font-extrabold px-2.5 py-0.5 rounded-full uppercase">Área de Importação</span>
+          </div>
+          
+          <div class="p-5 flex-grow flex flex-col gap-4">
+            <div class="relative flex-grow">
+              <textarea id="paste-pend" oninput="analisarPendentesInstantaneamente(); sincronizarComNuvem();" placeholder="Cole aqui a coluna 'N.º Rota' direto do sistema.&#10;&#10;Exemplo:&#10;H1_AM6&#10;F22_AM6&#10;K9_AM6&#10;A4_AM6&#10;&#10;A letra inicial identifica a ilha automaticamente." class="w-full h-44 bg-slate-50 border border-slate-200 text-slate-800 p-4 rounded-2xl text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none transition custom-scrollbar"></textarea>
+              <div class="absolute right-3 bottom-3 text-[10px] bg-slate-200 text-slate-600 px-2 py-1 rounded-lg pointer-events-none font-bold" id="past-line-count">0 rotas coladas</div>
+            </div>
+
+            <!-- Pre-analisador Inteligente (Real-time feedback) -->
+            <div id="analisador-feedback" class="bg-slate-50 border border-slate-200 p-4 rounded-xl hidden flex-col gap-2">
+              <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                <span class="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Distribuição Pré-calculada das Rotas</span>
+                <span class="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                  <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> <span id="analise-total">0</span> Carrinhos Únicos
+                </span>
+              </div>
+              <div id="analise-badges" class="flex flex-wrap gap-1.5 max-h-16 overflow-y-auto custom-scrollbar pt-1">
+                <!-- Badges gerados na digitação -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <button onclick="gerarDashboard()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm tracking-widest uppercase rounded-2xl shadow-xl shadow-emerald-500/10 flex items-center justify-center gap-2 transition hover:-translate-y-0.5 active:translate-y-0">
+        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+        CALCULAR E IR PARA O DASHBOARD
+      </button>
+
+    </div>
+
+    <!-- ========================================== -->
+    <!-- ABA DO DASHBOARD -->
+    <!-- ========================================== -->
+    <div id="aba-dash-content" class="hidden space-y-6">
+      
+      <!-- Container do Dashboard principal em Branco Sólido e Elegante -->
+      <div id="dash-content-capture" class="p-6 bg-white border border-slate-200 rounded-3xl space-y-6 shadow-md">
+        
+        <!-- Título do Dashboard em Banner Escuro igual ao WhatsApp -->
+        <div class="bg-navy-500 text-white text-center py-4 rounded-xl shadow-md border border-navy-600">
+          <h2 id="dash-titulo" class="text-sm md:text-base font-black tracking-widest uppercase font-mono">FECHAMENTO AUTOMÁTICO DE CARRINHOS — SPA1 — AM6</h2>
+        </div>
+
+        <div class="text-center">
+          <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-700 text-[10px] font-extrabold rounded-full uppercase tracking-wider">
+            FECHAMENTO GERAL
+          </span>
+        </div>
+
+        <!-- Seção de Kpis e Gauge -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+          
+          <!-- Gauge Arc Vetorial (Acurácia de Fechamento Geral) CORRIGIDO -->
+          <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm lg:col-span-5 flex flex-col items-center justify-center text-center relative overflow-hidden">
+            
+            <div class="relative w-64 h-36 flex items-center justify-center mt-2">
+              <!-- SVG Gauge conforme layout com caminho completo corrigido de 20 a 180 -->
+              <svg class="absolute inset-0 w-full h-full" viewBox="0 0 200 120">
+                <!-- Trilha de Fundo -->
+                <path d="M20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#f1f5f9" stroke-width="14" stroke-linecap="round"/>
+                <!-- Arco de Progresso em Verde Esmeralda (Corrigido d para cobrir até 180) -->
+                <path id="gauge-arc-fill" d="M20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#10b981" stroke-width="16" stroke-linecap="round" class="transition-all duration-1000 ease-out"/>
+                
+                <!-- Linha indicadora de Meta de Fechamento -->
+                <line id="gauge-meta-line" x1="100" y1="20" x2="100" y2="10" stroke="#2563eb" stroke-width="3" transform="rotate(0, 100, 100)" class="transition-all duration-1000 ease-out" />
+              </svg>
+              
+              <!-- Texto central -->
+              <div class="absolute bottom-2 flex flex-col items-center">
+                <span id="gauge-val" class="text-3xl font-black text-slate-950 leading-none">—</span>
+                <span class="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Acurácia</span>
+              </div>
+            </div>
+
+            <div class="mt-2 flex flex-col items-center">
+              <div class="flex items-center gap-1.5 text-xs text-slate-600 font-semibold">
+                <span id="gauge-meta-txt">Meta: 70%</span>
+                <span>|</span>
+                <span id="dash-meta-badge" class="text-emerald-600 font-bold flex items-center gap-1">
+                  <i data-lucide="check-square" class="w-3.5 h-3.5"></i> Dentro da Meta
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cards KPI Coloridos idênticos à foto -->
+          <div class="lg:col-span-7 flex flex-col gap-4 justify-between">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 h-full">
+              <!-- KPI Total - Azul Royal -->
+              <div class="bg-blue-600 text-white p-5 rounded-2xl shadow-md flex flex-col items-center justify-center text-center">
+                <p class="text-[9px] font-extrabold uppercase tracking-widest opacity-90">TOTAL CARRINHOS</p>
+                <p id="kpi-total" class="text-4xl font-black mt-2">0</p>
+              </div>
+
+              <!-- KPI Fechados - Verde -->
+              <div class="bg-emerald-500 text-white p-5 rounded-2xl shadow-md flex flex-col items-center justify-center text-center">
+                <p class="text-[9px] font-extrabold uppercase tracking-widest opacity-90">FECHADOS</p>
+                <p id="kpi-fec" class="text-4xl font-black mt-2">0</p>
+              </div>
+
+              <!-- KPI Pendentes - Vermelho -->
+              <div class="bg-rose-600 text-white p-5 rounded-2xl shadow-md flex flex-col items-center justify-center text-center">
+                <p class="text-[9px] font-extrabold uppercase tracking-widest opacity-90">PENDENTES</p>
+                <p id="kpi-pend" class="text-4xl font-black mt-2">0</p>
+              </div>
+            </div>
+
+            <!-- Painel de Destaques Rápidos -->
+            <div class="bg-white border border-slate-200 p-4 rounded-2xl grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div class="flex items-center gap-3 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                <div class="p-2.5 bg-blue-100 text-blue-600 rounded-lg">
+                  <i data-lucide="trending-up" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Melhor Ilha (Eficiência)</p>
+                  <p id="stats-best-ilha" class="text-sm font-bold text-slate-800">—</p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-3 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                <div class="p-2.5 bg-blue-50 text-blue-750 rounded-lg">
+                  <i data-lucide="trending-down" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Mais Crítica (Pendências)</p>
+                  <p id="stats-worst-ilha" class="text-sm font-bold text-slate-800">—</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- Tabela Analítica exatamente como no WhatsApp (Com header azul claro e fundo branco sólido) -->
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+          
+          <!-- Controles de Tabela -->
+          <div class="p-4 bg-slate-50/50 border-b border-slate-200 flex flex-col md:flex-row items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
+              <button onclick="filtrarTabela('todas')" id="btn-filt-todas" class="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg transition shadow-md shadow-blue-600/15">TODAS</button>
+              <button onclick="filtrarTabela('fechadas')" id="btn-filt-fechadas" class="px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-bold rounded-lg transition">100% FECHADAS</button>
+              <button onclick="filtrarTabela('fora')" id="btn-filt-fora" class="px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-bold rounded-lg transition">FORA DA META</button>
+            </div>
+
+            <!-- Campo Busca -->
+            <div class="relative w-full md:w-64">
+              <input type="text" id="tabela-busca" oninput="buscarNaTabela()" placeholder="Filtrar por Ilha..." class="w-full bg-slate-50 border border-slate-200 text-slate-800 pl-8 pr-3 py-1.5 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+              <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto custom-scrollbar">
+            <table class="w-full border-collapse">
+              <thead>
+                <!-- Cabecalho correspondendo à imagem WhatsApp (Tom de Azul Claro de Tabela) -->
+                <tr class="bg-blue-100/60 text-[10px] text-slate-700 uppercase tracking-wider font-extrabold border-b border-slate-200 text-left">
+                  <th class="p-3 cursor-pointer select-none hover:bg-blue-200/50 transition" onclick="sort('ilha')">Ilha/Rua <span id="sort-icon-ilha"></span></th>
+                  <th class="p-3 max-w-xs">Carrinhos Pendentes <span id="sort-icon-carrinho"></span></th>
+                  <th class="p-3 cursor-pointer select-none hover:bg-blue-200/50 transition text-center" onclick="sort('total')">Carrinhos Totais <span id="sort-icon-total"></span></th>
+                  <th class="p-3 cursor-pointer select-none hover:bg-blue-200/50 transition text-center" onclick="sort('fec')">Carrinhos Fechados <span id="sort-icon-fec"></span></th>
+                  <th class="p-3 cursor-pointer select-none hover:bg-blue-200/50 transition text-center" onclick="sort('pend')">Pendentes <span id="sort-icon-pend"></span></th>
+                  <th class="p-3 cursor-pointer select-none hover:bg-blue-200/50 transition" onclick="sort('pct')">% Ilha <span id="sort-icon-pct"></span></th>
+                </tr>
+              </thead>
+              <tbody id="tbody-dash" class="divide-y divide-slate-150">
+                <!-- Linhas inseridas dinamicamente -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Paginação e Exportação -->
+          <div class="p-4 bg-slate-50/50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+            <button onclick="exportarCSV()" class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 transition">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              Exportar para Planilha (.csv)
+            </button>
+
+            <div class="flex items-center gap-4">
+              <span id="pag-info" class="font-medium">Carregando dados...</span>
+              <div class="flex gap-1">
+                <button onclick="pagAnterior()" class="p-1.5 border border-slate-200 hover:bg-slate-100 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed" id="btn-pag-ant">
+                  <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                </button>
+                <button onclick="pagProxima()" class="p-1.5 border border-slate-200 hover:bg-slate-100 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed" id="btn-pag-prox">
+                  <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- MODAL HISTÓRICO COM SIDEBAR OU DIÁLOGO AMPLO -->
+  <div id="hist-overlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[9900] hidden items-center justify-center p-4">
+    <div class="bg-white border border-slate-200 rounded-3xl w-full max-w-xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden scale-95 transition-transform duration-200" id="hist-box">
+      <!-- Topo Modal -->
+      <div class="bg-navy-500 text-white px-6 py-4 flex items-center justify-between border-b border-navy-600">
+        <div class="flex items-center gap-2">
+          <i data-lucide="database" class="text-blue-300 w-5 h-5"></i>
+          <h3 class="text-sm font-bold uppercase tracking-wider">Histórico de Fechamentos</h3>
+        </div>
+        <button onclick="fecharHistorico()" class="text-slate-200 hover:text-white transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Controles Superiores do Histórico -->
+      <div class="p-4 bg-slate-50 border-b border-slate-200 flex gap-2">
+        <button onclick="salvarRegistro()" class="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-500/10 transition">
+          <i data-lucide="save" class="w-4 h-4"></i>
+          Salvar Relatório Atual
+        </button>
+        <button onclick="confirmarLimpezaHistorico()" class="flex items-center gap-1 px-3 py-2.5 text-red-600 hover:text-white hover:bg-red-500 border border-red-200 rounded-xl text-xs font-semibold transition">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          Excluir Tudo
+        </button>
+      </div>
+
+      <!-- Lista de Registros -->
+      <div id="hist-lista" class="p-4 overflow-y-auto custom-scrollbar flex-grow space-y-3 bg-slate-50">
+        <!-- Linhas injetadas dinamicamente -->
+      </div>
+    </div>
+  </div>
+
+  <!-- RODAPÉ -->
+  <footer class="bg-white border-t border-slate-200 py-3 text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-auto relative z-10">
+    <span>KUEHNE+NAGEL — SPA1 HUB LOGÍSTICO — FECHAMENTO DE CARRINHOS v3.1</span>
+  </footer>
+
+  <!-- INTEGRANDO BANCO DE DADOS EM TEMPO REAL (FIREBASE) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    const STORAGE = 'fechamento_spa1_v2';
+    const HIST_KEY = 'fechamento_spa1_historico';
+    const POR_PAG = 15;
+
+    let ilhas = [];
+    let _dashRows = [];
+    let _filteredRows = [];
+    let sortCol = 'pct';
+    let sortAsc = false;
+    let pag = 1;
+    let filtroStatus = 'todas'; // 'todas' | 'fechadas' | 'fora'
+
+    // Estado e Conectividade do Firebase
+    let useFirebase = false;
+    let db, auth, userId;
+    let unsubscribeRoom = null;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'fechamento-spa1-colab';
+
+    // Elementos Úteis
+    const elData = document.getElementById('inp-data');
+    const elCiclo = document.getElementById('inp-ciclo');
+    const elMeta = document.getElementById('inp-meta');
+    const elPaste = document.getElementById('paste-pend');
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Data padrão hoje
+      const hoje = new Date();
+      const offset = hoje.getTimezoneOffset();
+      const hojeLocal = new Date(hoje.getTime() - (offset * 60 * 1000));
+      elData.value = hojeLocal.toISOString().slice(0, 10);
+      
+      carregarConfiguracoes();
+
+      // INICIALIZAÇÃO ZERADA (Tabela limpa conforme solicitação)
+      if (!ilhas.length) {
+        ilhas = [];
+      }
+      
+      renderIlhas();
+      analisarPendentesInstantaneamente();
+      lucide.createIcons();
+
+      // Inicializa Conectividade em Nuvem
+      initCloudSync();
+    });
+
+    // SISTEMA DE TOASTS CUSTOMIZADOS (Substitui Alertas)
+    function showToast(mensagem, tipo = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      
+      let bgCor = 'bg-white border-slate-200 text-slate-800';
+      let icon = 'info';
+      let iconCor = 'text-blue-500';
+
+      if (tipo === 'success') {
+        bgCor = 'bg-emerald-600 text-white border-transparent';
+        icon = 'check-circle';
+        iconCor = 'text-white';
+      } else if (tipo === 'error') {
+        bgCor = 'bg-rose-600 text-white border-transparent';
+        icon = 'x-circle';
+        iconCor = 'text-white';
+      } else if (tipo === 'warn') {
+        bgCor = 'bg-amber-500 text-white border-transparent';
+        icon = 'alert-triangle';
+        iconCor = 'text-white';
+      }
+
+      toast.className = `flex items-center gap-3 px-4 py-3 border rounded-xl shadow-xl transition-all duration-300 translate-y-5 opacity-0 pointer-events-auto ${bgCor}`;
+      toast.innerHTML = `
+        <i data-lucide="${icon}" class="w-5 h-5 shrink-0 ${iconCor}"></i>
+        <span class="text-xs font-semibold">${mensagem}</span>
+      `;
+
+      container.appendChild(toast);
+      lucide.createIcons();
+
+      // Trigger animação
+      setTimeout(() => {
+        toast.classList.remove('translate-y-5', 'opacity-0');
+      }, 50);
+
+      // Desaparecer e deletar
+      setTimeout(() => {
+        toast.classList.add('translate-y-[-10px]', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // DIÁLOGO CONFIRMAÇÃO CUSTOMIZADO (Substitui confirm())
+    function mostrarConfirm(titulo, mensagem, acaoConfirmada, tipoBtn = 'danger') {
+      const modal = document.getElementById('confirm-modal');
+      const box = document.getElementById('confirm-box');
+      const elTitle = document.getElementById('confirm-title');
+      const elMsg = document.getElementById('confirm-message');
+      const btnYes = document.getElementById('confirm-btn-yes');
+      const btnNo = document.getElementById('confirm-btn-no');
+
+      elTitle.textContent = titulo;
+      elMsg.textContent = mensagem;
+
+      if (tipoBtn === 'danger') {
+        btnYes.className = 'px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold rounded-xl shadow-lg shadow-rose-600/20 transition';
+        btnYes.textContent = 'Excluir / Limpar';
+      } else {
+        btnYes.className = 'px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/20 transition';
+        btnYes.textContent = 'Confirmar';
+      }
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      setTimeout(() => box.classList.remove('scale-95'), 50);
+
+      // Limpar cliques anteriores
+      const novoBtnYes = btnYes.cloneNode(true);
+      btnYes.parentNode.replaceChild(novoBtnYes, btnYes);
+
+      const novoBtnNo = btnNo.cloneNode(true);
+      btnNo.parentNode.replaceChild(novoBtnNo, btnNo);
+
+      novoBtnYes.addEventListener('click', () => {
+        fecharConfirm();
+        acaoConfirmada();
+      });
+
+      novoBtnNo.addEventListener('click', fecharConfirm);
+    }
+
+    function fecharConfirm() {
+      const modal = document.getElementById('confirm-modal');
+      const box = document.getElementById('confirm-box');
+      box.classList.add('scale-95');
+      setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }, 150);
+    }
+
+    // DATABASE E CONEXÃO
+    async function initCloudSync() {
+      if (typeof __firebase_config === 'undefined' || !__firebase_config) {
+        document.getElementById('cloud-status-text').textContent = 'Modo Local (Offline)';
+        document.getElementById('cloud-last-sync').textContent = 'Não configurado';
+        return;
+      }
+
+      try {
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+
+        // Autenticação
+        let userCred;
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          userCred = await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          userCred = await signInAnonymously(auth);
+        }
+
+        userId = userCred.user.uid;
+        useFirebase = true;
+
+        document.getElementById('cloud-user-id').textContent = userId;
+        document.getElementById('cloud-status-indicator').className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse';
+        document.getElementById('cloud-status-text').textContent = 'Conectado à Nuvem';
+
+        // Conecta à sala inicial padrão
+        conectarSala('SPA1-GERAL');
+
+      } catch (err) {
+        console.error("Falha ao inicializar a Sincronização em Nuvem: ", err);
+        document.getElementById('cloud-status-text').textContent = 'Modo Local (Offline)';
+        document.getElementById('cloud-last-sync').textContent = 'Erro ao conectar';
+      }
+    }
+
+    async function conectarSala(salaNome) {
+      if (!useFirebase) return;
+      if (unsubscribeRoom) unsubscribeRoom();
+
+      const salaLimpa = salaNome.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') || 'SPA1-GERAL';
+      
+      document.getElementById('cloud-room-input').value = salaLimpa;
+      document.getElementById('cloud-room-lbl').textContent = salaLimpa;
+      document.getElementById('cloud-last-sync').textContent = 'Sincronizando sala...';
+
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', salaLimpa);
+
+      // Ouvinte em tempo real
+      unsubscribeRoom = onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const cloudData = docSnap.data();
+          if (cloudData.updatedBy !== userId) {
+            ilhas = cloudData.ilhas || [];
+            elPaste.value = cloudData.pend || '';
+            elData.value = cloudData.data || '';
+            elCiclo.value = cloudData.ciclo || '';
+            elMeta.value = cloudData.meta || '0.70';
+
+            renderIlhas();
+            analisarPendentesInstantaneamente();
+            salvarConfiguracoes();
+
+            if (!document.getElementById('aba-dash-content').classList.contains('hidden')) {
+              gerarDashboardSilencioso();
+            }
+
+            const now = new Date();
+            document.getElementById('cloud-last-sync').textContent = `Sincronizado: ${now.toLocaleTimeString()}`;
+            showToast('Sincronizado com os dados do painel em tempo real!', 'success');
+          }
+        } else {
+          document.getElementById('cloud-last-sync').textContent = 'Pronto (Sala Vazia)';
+        }
+      }, (err) => {
+        console.error("Erro ao escutar atualizações da sala: ", err);
+        showToast('Não foi possível sincronizar alterações da sala.', 'error');
+      });
+    }
+
+    async function sincronizarComNuvem() {
+      if (!useFirebase || !userId) return;
+
+      const salaId = document.getElementById('cloud-room-input').value.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '') || 'SPA1-GERAL';
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'sessions', salaId);
+
+      try {
+        await setDoc(docRef, {
+          ilhas,
+          pend: elPaste.value,
+          data: elData.value,
+          ciclo: elCiclo.value,
+          meta: elMeta.value,
+          updatedBy: userId,
+          updatedAt: Date.now()
+        }, { merge: true });
+
+        const now = new Date();
+        document.getElementById('cloud-last-sync').textContent = `Enviado à Nuvem: ${now.toLocaleTimeString()}`;
+      } catch (err) {
+        console.error("Erro ao salvar dados na nuvem: ", err);
+        showToast('Erro ao transmitir dados para os demais usuários.', 'warn');
+      }
+    }
+
+    // PERSISTÊNCIA DAS CONFIGURAÇÕES EM TELA LOCAL
+    function salvarConfiguracoes() {
+      localStorage.setItem(STORAGE, JSON.stringify({
+        ilhas,
+        pend: elPaste.value,
+        data: elData.value,
+        ciclo: elCiclo.value,
+        meta: elMeta.value
+      }));
+    }
+
+    function carregarConfiguracoes() {
+      try {
+        const d = JSON.parse(localStorage.getItem(STORAGE) || '{}');
+        if (d.ilhas) ilhas = d.ilhas;
+        if (d.pend) elPaste.value = d.pend;
+        if (d.data) elData.value = d.data;
+        if (d.ciclo) elCiclo.value = d.ciclo;
+        if (d.meta) elMeta.value = d.meta;
+      } catch (e) {
+        showToast('Erro ao carregar configurações do navegador.', 'error');
+      }
+    }
+
+    function confirmarLimpeza() {
+      mostrarConfirm(
+        'Limpar Todas as Informações?', 
+        'Deseja realmente zerar a lista de ilhas e as rotas pendentes coladas? Esta ação esvaziará a tela de entrada local e na nuvem.',
+        () => {
+          ilhas = [];
+          elPaste.value = '';
+          renderIlhas();
+          analisarPendentesInstantaneamente();
+          salvarConfiguracoes();
+          sincronizarComNuvem();
+          showToast('Dados limpos com sucesso.', 'success');
+        }
+      );
+    }
+
+    function calcularCapacidadeTotal() {
+      const totalCarts = ilhas.reduce((acc, curr) => acc + (parseInt(curr.total) || 0), 0);
+      const totalIlhasAtivas = ilhas.filter(l => l.ilha && l.total).length;
+      
+      document.getElementById('tot-ilhas-count').textContent = `${totalIlhasAtivas} Ativas`;
+      document.getElementById('tot-capacidade-count').textContent = `${totalCarts} carrinhos`;
+    }
+
+    // GERAÇÃO DINÂMICA DA TABELA DE ENTRADA (COMPLETAMENTE TRANSPARENTE E SEM MARCAÇÃO BRANCA)
+    function renderIlhas() {
+      const tbody = document.getElementById('tbody-ilhas');
+      tbody.innerHTML = ilhas.map((l, i) => `
+        <tr class="hover:bg-slate-50 transition-colors">
+          <td class="py-2.5 pr-2">
+            <input value="${l.ilha}" placeholder="Ex: F" oninput="atualizarCampoIlha(${i}, 'ilha', this.value)" onblur="salvarConfiguracoes(); analisarPendentesInstantaneamente(); sincronizarComNuvem();" class="w-20 uppercase font-bold text-center bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-transparent focus:outline-none py-1 text-xs text-slate-800 rounded transition">
+          </td>
+          <td class="py-2.5 pr-2">
+            <input type="number" value="${l.total}" placeholder="0" oninput="atualizarCampoIlha(${i}, 'total', this.value); calcularCapacidadeTotal();" onblur="salvarConfiguracoes(); sincronizarComNuvem();" class="w-full font-semibold bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-transparent focus:outline-none py-1 text-xs text-slate-800 rounded transition">
+          </td>
+          <td class="py-2.5 text-center">
+            <button onclick="removerIlha(${i})" class="p-1 text-slate-400 hover:text-rose-500 rounded-lg transition" title="Remover Ilha">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </td>
+        </tr>
+      `).join('');
+      
+      calcularCapacidadeTotal();
+      lucide.createIcons();
+    }
+
+    function atualizarCampoIlha(index, campo, valor) {
+      ilhas[index][campo] = valor;
+    }
+
+    function addIlha() {
+      ilhas.push({ id: Math.random(), ilha: '', total: '' });
+      renderIlhas();
+    }
+
+    function removerIlha(index) {
+      ilhas.splice(index, 1);
+      renderIlhas();
+      salvarConfiguracoes();
+      analisarPendentesInstantaneamente();
+      sincronizarComNuvem();
+    }
+
+    // ANÁLISE EM TEMPO REAL DE ROTAS COLADAS
+    function analisarPendentesInstantaneamente() {
+      const text = elPaste.value;
+      const linhas = text.trim().split(/\r?\n/).filter(l => l.trim());
+      
+      document.getElementById('past-line-count').textContent = `${linhas.length} rotas coladas`;
+
+      const mapaAux = {};
+      const unicos = new Set();
+
+      linhas.forEach(linha => {
+        const rota = inlineRota(linha);
+        if (!rota || unicos.has(rota)) return;
+        unicos.add(rota);
+
+        const ilhaLetra = rota.charAt(0).toUpperCase();
+        mapaAux[ilhaLetra] = (mapaAux[ilhaLetra] || 0) + 1;
+      });
+
+      const totalUnicos = unicos.size;
+      document.getElementById('analise-total').textContent = totalUnicos;
+
+      const containerFeedback = document.getElementById('analisador-feedback');
+      const containerBadges = document.getElementById('analise-badges');
+
+      if (totalUnicos > 0) {
+        containerFeedback.classList.remove('hidden');
+        containerFeedback.classList.add('flex');
+
+        containerBadges.innerHTML = Object.entries(mapaAux).map(([ilha, count]) => {
+          const cadastrada = ilhas.some(l => l.ilha.toUpperCase() === ilha && l.total);
+          const corBadge = cadastrada 
+            ? 'bg-blue-100 text-blue-700' 
+            : 'bg-slate-200 text-slate-500 border border-dashed border-slate-300';
+          
+          return `
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ${corBadge}" title="${cadastrada ? 'Ilha Cadastrada' : 'Aviso: This ilha não foi cadastrada na tabela à esquerda'}">
+              Ilha ${ilha}: <strong>${count}</strong> ${!cadastrada ? '⚠️' : ''}
+            </span>
+          `;
+        }).join('');
+      } else {
+        containerFeedback.classList.add('hidden');
+        containerFeedback.classList.remove('flex');
+      }
+    }
+
+    function inlineRota(linha) {
+      const parts = linha.trim().split(/\s+/);
+      return parts[0] ? parts[0] : null;
+    }
+
+    // CÁLCULOS DO DASHBOARD
+    function gerarDashboard() {
+      salvarConfiguracoes();
+      sincronizarComNuvem();
+      
+      const ilhasValidas = ilhas.filter(l => l.ilha && l.total);
+      if (!ilhasValidas.length) {
+        showToast('Configure ao menos uma ilha operacional antes de prosseguir!', 'warn');
+        return;
+      }
+
+      gerarDashboardSilencioso();
+      setTab('dash');
+      showToast('Dashboard gerado com sucesso!', 'success');
+    }
+
+    function gerarDashboardSilencioso() {
+      const ilhasValidas = ilhas.filter(l => l.ilha && l.total);
+      if (!ilhasValidas.length) return;
+
+      const data = elData.value;
+      const ciclo = elCiclo.value;
+      const meta = parseFloat(elMeta.value) || 0.70;
+
+      document.getElementById('dash-titulo').textContent = `FECHAMENTO AUTOMÁTICO DE CARRINHOS — SPA1 — ${ciclo ? ciclo.toUpperCase() : 'AM6'}`;
+
+      const pendText = elPaste.value;
+      const mapaPend = {};
+      const carrsUnicos = new Set();
+
+      pendText.trim().split(/\r?\n/).filter(l => l.trim()).forEach(linha => {
+        const rota = inlineRota(linha);
+        if (!rota || carrsUnicos.has(rota)) return;
+        carrsUnicos.add(rota);
+
+        const ilha = rota.charAt(0).toUpperCase();
+        if (!mapaPend[ilha]) mapaPend[ilha] = [];
+        mapaPend[ilha].push(rota);
+      });
+
+      _dashRows = ilhasValidas.map(l => {
+        const nomeIlha = l.ilha.trim().toUpperCase();
+        const total = parseInt(l.total) || 0;
+        const listaPendentes = mapaPend[nomeIlha] || [];
+        const pend = Math.min(listaPendentes.length, total);
+        const fec = Math.max(0, total - pend);
+        const pct = total ? (fec / total) * 100 : null;
+
+        return {
+          ilha: nomeIlha,
+          total,
+          fec,
+          pend,
+          carrPend: listaPendentes.join(', '),
+          pct
+        };
+      });
+
+      const totalGeral = _dashRows.reduce((s, r) => s + r.total, 0);
+      const fecGeral = _dashRows.reduce((s, r) => s + r.fec, 0);
+      const pendGeral = _dashRows.reduce((s, r) => s + r.pend, 0);
+      const pctGeral = totalGeral ? (fecGeral / totalGeral) * 100 : 0;
+
+      document.getElementById('kpi-total').textContent = totalGeral;
+      document.getElementById('kpi-fec').textContent = fecGeral;
+      document.getElementById('kpi-pend').textContent = pendGeral;
+      document.getElementById('gauge-val').textContent = pctGeral.toFixed(2) + '%';
+
+      const dentroMeta = (pctGeral / 100) >= meta;
+      const metaBadge = document.getElementById('dash-meta-badge');
+      document.getElementById('gauge-meta-txt').innerHTML = `Meta: ${(meta * 100).toFixed(0)}%`;
+      
+      if (dentroMeta) {
+        metaBadge.className = "text-emerald-600 font-bold flex items-center gap-1";
+        metaBadge.innerHTML = `<i data-lucide="check-square" class="w-3.5 h-3.5"></i> Dentro da Meta`;
+      } else {
+        metaBadge.className = "text-rose-600 font-bold flex items-center gap-1";
+        metaBadge.innerHTML = `<i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> Fora da Meta`;
+      }
+
+      calcularEstatisticasRapidas();
+      desenharGaugeSVG(pctGeral, meta * 100);
+
+      _filteredRows = [..._dashRows];
+      filtrarTabela(filtroStatus);
+    }
+
+    function calcularEstatisticasRapidas() {
+      if (!_dashRows.length) return;
+
+      const sortedBest = [..._dashRows].sort((a, b) => b.pct - a.pct || b.total - a.total);
+      const melhor = sortedBest[0];
+      
+      if (melhor && melhor.pct !== null) {
+        document.getElementById('stats-best-ilha').innerHTML = `Ilha ${melhor.ilha} <span class="text-emerald-600">(${melhor.pct.toFixed(1)}%)</span>`;
+      } else {
+        document.getElementById('stats-best-ilha').textContent = '—';
+      }
+
+      const sortedWorst = [..._dashRows].sort((a, b) => b.pend - a.pend || a.pct - b.pct);
+      const pior = sortedWorst[0];
+
+      if (pior && pior.pend > 0) {
+        document.getElementById('stats-worst-ilha').innerHTML = `Ilha ${pior.ilha} <span class="text-rose-600">(${pior.pend} pendentes)</span>`;
+      } else {
+        document.getElementById('stats-worst-ilha').textContent = 'Zerar pendências! 🎉';
+      }
+    }
+
+    // ARCO DE PREENCHIMENTO DO GAUGE CORRIGIDO
+    function desenharGaugeSVG(pct, metaPct) {
+      const arcFill = document.getElementById('gauge-arc-fill');
+      const semiCircunferencia = 251.32; // Comprimento total do semicírculo de raio 80
+
+      arcFill.style.strokeDasharray = `${semiCircunferencia} ${semiCircunferencia}`;
+      const preenchimento = Math.min(Math.max(pct, 0), 100);
+      
+      // Se pct é 81.39%, o offset deve ocultar apenas os (100 - 81.39)% do topo e do fim.
+      const offset = semiCircunferencia - (preenchimento / 100) * semiCircunferencia;
+      arcFill.style.strokeDashoffset = offset;
+
+      const metaLine = document.getElementById('gauge-meta-line');
+      const anguloMeta = (metaPct / 100) * 180 - 90;
+      metaLine.setAttribute('transform', `rotate(${anguloMeta}, 100, 100)`);
+    }
+
+    function filtrarTabela(tipo) {
+      filtroStatus = tipo;
+      
+      const bTodas = document.getElementById('btn-filt-todas');
+      const bFechadas = document.getElementById('btn-filt-fechadas');
+      const bFora = document.getElementById('btn-filt-fora');
+
+      const classesAtivo = "px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg transition shadow-md shadow-blue-600/15";
+      const classesInativo = "px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-bold rounded-lg transition";
+
+      bTodas.className = classesInativo;
+      bFechadas.className = classesInativo;
+      bFora.className = classesInativo;
+
+      const meta = parseFloat(elMeta.value) || 0.70;
+
+      if (tipo === 'fechadas') {
+        bFechadas.className = classesAtivo;
+        _filteredRows = _dashRows.filter(r => r.pct === 100);
+      } else if (tipo === 'fora') {
+        bFora.className = classesAtivo;
+        _filteredRows = _dashRows.filter(r => r.pct !== null && (r.pct / 100) < meta);
+      } else {
+        bTodas.className = classesAtivo;
+        _filteredRows = [..._dashRows];
+      }
+
+      pag = 1;
+      buscarNaTabela();
+    }
+
+    function buscarNaTabela() {
+      const termo = document.getElementById('tabela-busca').value.trim().toUpperCase();
+      let linesProntas = [..._filteredRows];
+
+      if (termo) {
+        linesProntas = linesProntas.filter(r => r.ilha.includes(termo));
+      }
+
+      renderTabelaFinal(linesProntas);
+    }
+
+    // TABELA FINAL (COM HEADER AZUL CLARO E MINI PILULAS DE ACURÁCIA, EXATAMENTE COMO NO WHATSAPP)
+    function renderTabelaFinal(dados) {
+      dados.sort((a, b) => {
+        let va = a[sortCol], vb = b[sortCol];
+        if (typeof va === 'string') { va = va || ''; vb = vb || ''; }
+        if (va === null) return 1; if (vb === null) return -1;
+        return sortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+      });
+
+      const colunas = ['ilha', 'total', 'fec', 'pend', 'pct'];
+      colunas.forEach(col => {
+        const iconContainer = document.getElementById(`sort-icon-${col}`);
+        if (!iconContainer) return;
+        if (sortCol === col) {
+          iconContainer.innerHTML = sortAsc ? '↑' : '↓';
+          iconContainer.className = "text-blue-600 font-extrabold ml-1";
+        } else {
+          iconContainer.innerHTML = '';
+        }
+      });
+
+      const total = dados.length;
+      const ini = (pag - 1) * POR_PAG;
+      const pgRows = dados.slice(ini, ini + POR_PAG);
+
+      const btnAnt = document.getElementById('btn-pag-ant');
+      const btnProx = document.getElementById('btn-pag-prox');
+      
+      btnAnt.disabled = pag <= 1;
+      btnProx.disabled = ini + POR_PAG >= total;
+
+      document.getElementById('pag-info').textContent = total 
+        ? `${ini + 1} - ${Math.min(ini + POR_PAG, total)} de ${total}` 
+        : 'Nenhuma ilha encontrada';
+
+      const meta = parseFloat(elMeta.value) || 0.70;
+
+      document.getElementById('tbody-dash').innerHTML = pgRows.map(r => {
+        const pctFmt = r.pct !== null ? r.pct.toFixed(2) + '%' : 'N/A';
+        
+        let corPill = 'bg-rose-500'; 
+        let textCor = 'text-rose-600';
+
+        if (r.pct === null) {
+          corPill = 'bg-slate-300';
+          textCor = 'text-slate-500';
+        } else if (r.pct === 100) {
+          corPill = 'bg-emerald-500';
+          textCor = 'text-emerald-600';
+        } else if ((r.pct / 100) >= meta) {
+          corPill = 'bg-emerald-500';
+          textCor = 'text-emerald-600';
+        } else if (r.pct >= 70) {
+          corPill = 'bg-amber-500';
+          textCor = 'text-amber-600';
+        }
+
+        const listPendentesHtml = r.carrPend 
+          ? `<div class="text-[11px] font-mono text-slate-500 max-w-sm break-words">${r.carrPend}</div>` 
+          : `<span class="text-[10px] text-slate-400">—</span>`;
+
+        return `
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="p-3 text-sm font-extrabold text-slate-900">Ilha ${r.ilha}</td>
+            <td class="p-3">${listPendentesHtml}</td>
+            <td class="p-3 text-xs font-semibold text-slate-600 text-center">${r.total}</td>
+            <td class="p-3 text-xs font-bold text-emerald-600 text-center">${r.fec}</td>
+            <td class="p-3 text-xs font-bold text-rose-600 text-center">${r.pend}</td>
+            <td class="p-3">
+              <div class="flex items-center gap-2">
+                <!-- Mini Pill de Status/Acurácia da foto do WhatsApp -->
+                <div class="w-7 h-4 rounded-full border border-slate-300 flex items-center p-0.5 bg-slate-50 shrink-0">
+                  <div class="${corPill} h-full rounded-full transition-all duration-500" style="width: ${r.pct || 0}%"></div>
+                </div>
+                <span class="text-xs font-bold ${textCor}">${pctFmt}</span>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function sort(col) {
+      if (sortCol === col) {
+        sortAsc = !sortAsc;
+      } else {
+        sortCol = col;
+        sortAsc = false;
+      }
+      buscarNaTabela();
+    }
+
+    function pagAnterior() {
+      if (pag > 1) {
+        pag--;
+        buscarNaTabela();
+      }
+    }
+
+    function pagProxima() {
+      const total = _filteredRows.length;
+      if (pag * POR_PAG < total) {
+        pag++;
+        buscarNaTabela();
+      }
+    }
+
+    function setTab(aba) {
+      const abDados = document.getElementById('tab-dados');
+      const abDash = document.getElementById('tab-dash');
+      const cDados = document.getElementById('aba-dados-content');
+      const cDash = document.getElementById('aba-dash-content');
+
+      const activeBorder = "border-b-2 border-blue-600 text-blue-600 bg-blue-50/20";
+      const inactiveBorder = "border-transparent text-slate-500 hover:text-slate-800";
+
+      if (aba === 'dados') {
+        abDados.className = `flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider transition-all ${activeBorder}`;
+        abDash.className = `flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider transition-all ${inactiveBorder}`;
+        cDados.classList.remove('hidden');
+        cDash.classList.add('hidden');
+      } else {
+        abDash.className = `flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider transition-all ${activeBorder}`;
+        abDados.className = `flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider transition-all ${inactiveBorder}`;
+        cDash.classList.remove('hidden');
+        cDados.classList.add('hidden');
+      }
+    }
+
+    function getHistorico() {
+      try {
+        return JSON.parse(localStorage.getItem(HIST_KEY) || '[]');
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function setHistorico(historico) {
+      localStorage.setItem(HIST_KEY, JSON.stringify(historico));
+    }
+
+    function salvarRegistro() {
+      const data = elData.value;
+      const ciclo = elCiclo.value;
+      const meta = parseFloat(elMeta.value) || 0.70;
+
+      if (!data) {
+        showToast('É necessário ter uma data de execução para salvar o histórico!', 'warn');
+        return;
+      }
+      if (!_dashRows.length) {
+        showToast('Por favor, clique em "Calcular" e gere o dashboard antes de salvar!', 'warn');
+        return;
+      }
+
+      const totalGeral = _dashRows.reduce((s, r) => s + r.total, 0);
+      const fecGeral = _dashRows.reduce((s, r) => s + r.fec, 0);
+      const pendGeral = _dashRows.reduce((s, r) => s + r.pend, 0);
+      const pctGeral = totalGeral ? (fecGeral / totalGeral) * 100 : 0;
+
+      const novoRegistro = {
+        id: Date.now(),
+        data,
+        ciclo,
+        meta,
+        totalGeral,
+        fecGeral,
+        pendGeral,
+        pctGeral,
+        rows: _dashRows,
+        ilhas: JSON.parse(JSON.stringify(ilhas)),
+        pend: elPaste.value
+      };
+
+      const hist = getHistorico();
+      const duplicadoIdx = hist.findIndex(h => h.data === data && h.ciclo === ciclo);
+
+      if (duplicadoIdx >= 0) {
+        mostrarConfirm(
+          'Registro já existente', 
+          `Já existe um relatório salvo no histórico para a data ${new Date(data + 'T12:00').toLocaleDateString('pt-BR')} ${ciclo ? 'e ciclo ' + ciclo.toUpperCase() : ''}. Deseja sobrescrever os dados?`,
+          () => {
+            hist[duplicadoIdx] = novoRegistro;
+            setHistorico(hist);
+            renderHistorico();
+            showToast('Relatório atualizado no histórico com sucesso!', 'success');
+          },
+          'confirm'
+        );
+      } else {
+        hist.unshift(novoRegistro);
+        setHistorico(hist);
+        renderHistorico();
+        showToast('Relatório salvo no histórico local com sucesso!', 'success');
+      }
+    }
+
+    function renderHistorico() {
+      const hist = getHistorico();
+      const container = document.getElementById('hist-lista');
+
+      if (!hist.length) {
+        container.innerHTML = `
+          <div class="text-center py-10 text-slate-400">
+            <i data-lucide="folder-open" class="w-10 h-10 mx-auto opacity-30 mb-2 text-blue-900"></i>
+            <p class="text-xs font-bold uppercase tracking-wider">Histórico Vazio</p>
+            <p class="text-[10px] mt-1 text-slate-500">Insira as informações na aba principal, gere o relatório e salve.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      container.innerHTML = hist.map(h => {
+        const dataFmt = new Date(h.data + 'T12:00').toLocaleDateString('pt-BR');
+        const dentroMeta = h.pctGeral >= (h.meta * 100);
+        const metaCor = dentroMeta ? 'text-emerald-600' : 'text-rose-600';
+
+        return `
+          <div class="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col gap-3 hover:border-blue-500 transition shadow-sm">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-xs font-extrabold text-slate-900">${dataFmt}</span>
+                ${h.ciclo ? `<span class="ml-2 text-[9px] font-extrabold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full uppercase">${h.ciclo}</span>` : ''}
+              </div>
+              <button onclick="excluirRegistroHist(${h.id})" class="p-1 text-slate-400 hover:text-rose-500 rounded-lg transition" title="Excluir Registro">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+
+            <div class="grid grid-cols-4 gap-2">
+              <div class="bg-slate-50 p-2 rounded-xl text-center">
+                <p class="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Capac.</p>
+                <p class="text-sm font-black text-slate-800 mt-0.5">${h.totalGeral}</p>
+              </div>
+              <div class="bg-emerald-50 p-2 rounded-xl text-center">
+                <p class="text-[8px] font-bold text-emerald-600 uppercase tracking-widest">Fechad.</p>
+                <p class="text-sm font-black text-emerald-600 mt-0.5">${h.fecGeral}</p>
+              </div>
+              <div class="bg-rose-50 p-2 rounded-xl text-center">
+                <p class="text-[8px] font-bold text-rose-600 uppercase tracking-widest">Pend.</p>
+                <p class="text-sm font-black text-rose-600 mt-0.5">${h.pendGeral}</p>
+              </div>
+              <div class="bg-slate-50 p-2 rounded-xl text-center">
+                <p class="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Acurácia</p>
+                <p class="text-sm font-black ${metaCor} mt-0.5">${h.pctGeral.toFixed(1)}%</p>
+              </div>
+            </div>
+
+            <div class="flex justify-between items-center pt-1 border-t border-slate-100">
+              <span class="text-[9px] font-bold uppercase tracking-wider ${metaCor}">
+                ${dentroMeta ? '✅ Dentro da Meta' : '❌ Fora da Meta'}
+              </span>
+              <button onclick="carregarRegistroHist(${h.id})" class="flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded-lg transition">
+                <i data-lucide="folder-open" class="w-3.5 h-3.5"></i>
+                Carregar Relatório
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      lucide.createIcons();
+    }
+
+    function carregarRegistroHist(id) {
+      const hist = getHistorico();
+      const registro = hist.find(r => r.id === id);
+      if (!registro) return;
+
+      ilhas = registro.ilhas;
+      elPaste.value = registro.pend || '';
+      elData.value = registro.data;
+      elCiclo.value = registro.ciclo || '';
+      elMeta.value = registro.meta || 0.70;
+
+      renderIlhas();
+      salvarConfiguracoes();
+      analisarPendentesInstantaneamente();
+      fecharHistorico();
+      
+      gerarDashboard();
+      showToast('Dados do histórico carregados com sucesso!', 'success');
+    }
+
+    function excluirRegistroHist(id) {
+      mostrarConfirm(
+        'Remover do Histórico?',
+        'O registro selecionado será excluído permanentemente do banco de dados local.',
+        () => {
+          const hist = getHistorico().filter(h => h.id !== id);
+          setHistorico(hist);
+          renderHistorico();
+          showToast('Registro excluído do histórico.', 'success');
+        }
+      );
+    }
+
+    function confirmarLimpezaHistorico() {
+      const hist = getHistorico();
+      if (!hist.length) return;
+
+      mostrarConfirm(
+        'Limpar Todo o Histórico?',
+        'Atenção! Esta ação removerá definitivamente todos os relatórios arquivados em tela. Deseja prosseguir?',
+        () => {
+          setHistorico([]);
+          renderHistorico();
+          showToast('Histórico limpo com sucesso.', 'success');
+        }
+      );
+    }
+
+    function abrirHistorico() {
+      const overlay = document.getElementById('hist-overlay');
+      const box = document.getElementById('hist-box');
+      overlay.classList.remove('hidden');
+      overlay.classList.add('flex');
+      setTimeout(() => box.classList.remove('scale-95'), 50);
+      renderHistorico();
+    }
+
+    function fecharHistorico() {
+      const overlay = document.getElementById('hist-overlay');
+      const box = document.getElementById('hist-box');
+      box.classList.add('scale-95');
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+      }, 150);
+    }
+
+    // EXPORTAÇÃO PARA IMAGEM
+    async function gerarPNG() {
+      const loader = document.getElementById('print-loading');
+      loader.classList.remove('hidden');
+      loader.classList.add('flex');
+
+      try {
+        const dadosOcultos = document.getElementById('aba-dados-content').classList.contains('hidden');
+        const elementoAlvo = dadosOcultos 
+          ? document.getElementById('aba-dados-content')
+          : document.getElementById('dash-content-capture');
+
+        const opt = {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#e6f0fa',
+          borderRadius: 16
+        };
+
+        const canvas = await html2canvas(elementoAlvo, opt);
+        const link = document.createElement('a');
+        
+        const dataFmt = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+        const cicloFmt = elCiclo.value ? `_${elCiclo.value.toUpperCase()}` : '';
+        
+        link.download = `Fechamento_Carrinhos_SPA1_${dataFmt}${cicloFmt}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        
+        showToast('Imagem PNG gerada com sucesso!', 'success');
+      } catch (err) {
+        showToast('Não foi possível gerar a captura em PNG.', 'error');
+      } finally {
+        loader.classList.add('hidden');
+        loader.classList.remove('flex');
+      }
+    }
+
+    function exportarCSV() {
+      if (!_dashRows.length) {
+        showToast('Nenhum dado calculado para exportar!', 'warn');
+        return;
+      }
+
+      let csvContent = "data:text/csv;charset=utf-8,";
+      csvContent += "Ilha/Rua;Carrinhos Pendentes;Capacidade Total;Fechados;Pendentes;Acuracia (%)\n";
+
+      _dashRows.forEach(r => {
+        const pctFmt = r.pct !== null ? r.pct.toFixed(2) : "N/A";
+        const listPend = r.carrPend ? `"${r.carrPend}"` : "Nenhum";
+        csvContent += `${r.ilha};${listPend};${r.total};${r.fec};${r.pend};${pctFmt}\n`;
+      });
+
+      const encodeUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      
+      const dataFmt = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+      const cicloFmt = elCiclo.value ? `_${elCiclo.value.toUpperCase()}` : '';
+
+      link.setAttribute("href", encodeUri);
+      link.setAttribute("download", `Fechamento_SPA1_${dataFmt}${cicloFmt}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showToast('Dados exportados em formato CSV para Excel.', 'success');
+    }
+
+    window.addIlha = addIlha;
+    window.removerIlha = removerIlha;
+    window.atualizarCampoIlha = atualizarCampoIlha;
+    window.confirmarLimpeza = confirmarLimpeza;
+    window.analisarPendentesInstantaneamente = analisarPendentesInstantaneamente;
+    window.gerarDashboard = gerarDashboard;
+    window.filtrarTabela = filtrarTabela;
+    window.buscarNaTabela = buscarNaTabela;
+    window.pagAnterior = pagAnterior;
+    window.pagProxima = pagProxima;
+    window.setTab = setTab;
+    window.salvarRegistro = salvarRegistro;
+    window.carregarRegistroHist = carregarRegistroHist;
+    window.excluirRegistroHist = excluirRegistroHist;
+    window.confirmarLimpezaHistorico = confirmarLimpezaHistorico;
+    window.abrirHistorico = abrirHistorico;
+    window.fecharHistorico = fecharHistorico;
+    window.gerarPNG = gerarPNG;
+    window.exportarCSV = exportarCSV;
+    window.conectarSala = conectarSala;
+    window.sincronizarComNuvem = sincronizarComNuvem;
+    window.calcularCapacidadeTotal = calcularCapacidadeTotal;
+  </script>
+</body>
+</html>
